@@ -225,6 +225,7 @@ describe('provider presets API', () => {
     const ollama = PROVIDER_PRESETS.find((preset) => preset.id === 'ollama')
     const deepseek = PROVIDER_PRESETS.find((preset) => preset.id === 'deepseek')
     const zhipu = PROVIDER_PRESETS.find((preset) => preset.id === 'zhipuglm')
+    const zhipuCodingPlan = PROVIDER_PRESETS.find((preset) => preset.id === 'zhipuglm-coding-plan')
     const kimi = PROVIDER_PRESETS.find((preset) => preset.id === 'kimi')
     const minimax = PROVIDER_PRESETS.find((preset) => preset.id === 'minimax')
     const shengsuanyun = PROVIDER_PRESETS.find((preset) => preset.id === 'shengsuanyun')
@@ -259,6 +260,23 @@ describe('provider presets API', () => {
     expect(zhipu?.defaultModels.haiku).toBe('glm-5.3-flash[1m]')
     expect(zhipu?.defaultModels.sonnet).toBe('glm-5.3[1m]')
     expect(zhipu?.defaultModels.opus).toBe('glm-5.3[1m]')
+    expect(zhipuCodingPlan?.baseUrl).toBe('https://open.bigmodel.cn/api/anthropic')
+    expect(zhipuCodingPlan?.regionalEndpoints).toEqual([
+      { region: 'cn_zh', baseUrl: 'https://open.bigmodel.cn/api/anthropic' },
+      { region: 'global_en', baseUrl: 'https://api.z.ai/api/anthropic' },
+    ])
+    expect(zhipuCodingPlan?.apiFormat).toBe('anthropic')
+    expect(zhipuCodingPlan?.authStrategy).toBe('auth_token')
+    expect(zhipuCodingPlan?.reasoningProviderKind).toBe('zhipu_coding_plan')
+    expect(zhipuCodingPlan?.defaultModels).toEqual({
+      main: 'glm-5.3[1m]',
+      haiku: 'glm-5.3-flash[1m]',
+      sonnet: 'glm-5.3[1m]',
+      opus: 'glm-5.3[1m]',
+    })
+    expect(zhipuCodingPlan?.defaultEnv?.CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBeUndefined()
+    expect(zhipuCodingPlan?.modelContextWindows?.['glm-5.3']).toBe(1000000)
+    expect(zhipuCodingPlan?.modelContextWindows?.['glm-5.3-flash']).toBe(1000000)
     // Presets must not pin a provider-wide auto-compact window: the env is
     // model-agnostic, so it pinned small-context models at 1M and auto-compact
     // never fired (#1162). Real windows come from modelContextWindows instead.

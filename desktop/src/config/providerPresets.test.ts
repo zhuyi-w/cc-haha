@@ -74,6 +74,25 @@ describe('bundled provider presets', () => {
     expect(zhipu && presetMatchesBaseUrl(zhipu, ' HTTPS://API.Z.AI/api/anthropic/ ')).toBe(true)
   })
 
+  it('offers a GLM Coding Plan preset with the coding-plan reasoning profile', () => {
+    const codingPlan = BUNDLED_PROVIDER_PRESETS.find((preset) => preset.id === 'zhipuglm-coding-plan')
+
+    expect(codingPlan?.baseUrl).toBe('https://open.bigmodel.cn/api/anthropic')
+    expect(codingPlan?.regionalEndpoints).toEqual([
+      { region: 'cn_zh', baseUrl: 'https://open.bigmodel.cn/api/anthropic' },
+      { region: 'global_en', baseUrl: 'https://api.z.ai/api/anthropic' },
+    ])
+    expect(codingPlan?.apiFormat).toBe('anthropic')
+    expect(codingPlan?.authStrategy).toBe('auth_token')
+    expect(codingPlan?.reasoningProviderKind).toBe('zhipu_coding_plan')
+    expect(codingPlan?.defaultModels).toEqual({
+      main: 'glm-5.3[1m]',
+      haiku: 'glm-5.3-flash[1m]',
+      sonnet: 'glm-5.3[1m]',
+      opus: 'glm-5.3[1m]',
+    })
+  })
+
   it('keeps Kimi Code on its only official Anthropic-compatible endpoint', () => {
     const kimi = BUNDLED_PROVIDER_PRESETS.find((preset) => preset.id === 'kimi')
 
