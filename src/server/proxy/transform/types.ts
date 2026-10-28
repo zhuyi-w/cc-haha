@@ -92,6 +92,7 @@ export type OpenAIChatResponse = {
     message: {
       role: string
       content: string | null
+      refusal?: string | null
       tool_calls?: OpenAIToolCall[]
     }
     finish_reason: string | null
@@ -109,6 +110,7 @@ export type OpenAIChatStreamChunk = {
     delta: {
       role?: string
       content?: string | null
+      refusal?: string | null
       tool_calls?: Array<{
         index: number
         id?: string

@@ -23,3 +23,17 @@ describe('OpenAI Chat thinking toggle compatibility', () => {
     }).thinking).toBeUndefined()
   })
 })
+
+describe('OpenAI Chat stream usage request', () => {
+  const body = {
+    model: 'gpt-5.6-sol',
+    messages: [{ role: 'user' as const, content: 'hello' }],
+    max_tokens: 256,
+    stream: true,
+  }
+
+  test('asks for usage by default and omits it for endpoints that rejected the field', () => {
+    expect(anthropicToOpenaiChat(body).stream_options).toEqual({ include_usage: true })
+    expect(anthropicToOpenaiChat(body, { passStreamUsage: false }).stream_options).toBeUndefined()
+  })
+})

@@ -20,7 +20,7 @@ export function openaiChatToAnthropic(response: OpenAIChatResponse, model: strin
   if (upstreamError) throw new Error(upstreamError)
   const choice = response.choices?.[0]
   if (!choice?.message) throw new Error('OpenAI Chat upstream response has no message choice')
-  const stopReason = mapFinishReason(choice.finish_reason)
+  let stopReason = mapFinishReason(choice.finish_reason)
 
   const content: AnthropicContentBlock[] = []
 
@@ -44,9 +44,13 @@ export function openaiChatToAnthropic(response: OpenAIChatResponse, model: strin
     }
   }
 
-  // Convert text content
+  // Convert text content. A refusal is a completed assistant turn of its own:
+  // dropping it would surface as an empty reply even though the model answered.
   if (choice.message.content) {
     content.push({ type: 'text', text: choice.message.content })
+  }
+  if (typeof choice.message.refusal === 'string' && choice.message.refusal) {
+    content.push({ type: 'text', text: choice.message.refusal })
   }
 
   // Convert tool calls
@@ -67,6 +71,13 @@ export function openaiChatToAnthropic(response: OpenAIChatResponse, model: strin
         input: parseCompleteChatToolArguments(tc.function.arguments),
       })
     }
+  }
+
+  // Some OpenAI-compatible gateways report `stop` even when the message carries
+  // tool calls. Anthropic clients only run tools on `tool_use`, so the emitted
+  // content decides the stop reason rather than the gateway's label.
+  if (stopReason === 'end_turn' && content.some(block => block.type === 'tool_use')) {
+    stopReason = 'tool_use'
   }
 
   if (stopReason === 'tool_use' && !content.some(block => block.type === 'tool_use')) {

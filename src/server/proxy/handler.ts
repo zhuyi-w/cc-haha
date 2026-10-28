@@ -30,6 +30,11 @@ import {
   rememberOpenAIChatUnsupportedReasoningField,
   type OpenAIChatReasoningField,
 } from './openaiChatReasoningFieldSupport.js'
+import {
+  isOpenAIChatStreamOptionsRejection,
+  rememberOpenAIChatStreamUsageUnsupported,
+  shouldOmitOpenAIChatStreamUsage,
+} from './openaiChatStreamOptionsSupport.js'
 import { anthropicToOpenaiChat, type OpenAIChatImageContentMode } from './transform/anthropicToOpenaiChat.js'
 import { anthropicToOpenaiResponses } from './transform/anthropicToOpenaiResponses.js'
 import { RequestCompatibilityError, resolveRequestCompatibility, type RequestCompatibilityOptions } from './transform/requestCompatibility.js'
@@ -740,6 +745,7 @@ async function handleOpenaiChat(
   upstreamHeaders: Record<string, string> = {},
   imageContentModeOverride?: OpenAIChatImageContentMode,
   rejectedReasoningFields: ReadonlySet<OpenAIChatReasoningField> = new Set(),
+  omitStreamUsage = false,
 ): Promise<Response> {
   const knownDeepSeekHost = shouldUseDeepSeekReasoningCompat(baseUrl)
   const reasoningProfile = resolveModelReasoningProfile(body.model, 'openai_chat')
@@ -754,6 +760,7 @@ async function handleOpenaiChat(
     roundTripReasoningContent: knownDeepSeekHost || reasoningProfile?.family === 'deepseek-v4',
     passThinkingToggle: knownDeepSeekHost && !unsupportedReasoningFields.has('thinking'),
     passReasoningEffort: !unsupportedReasoningFields.has('reasoning_effort'),
+    passStreamUsage: !omitStreamUsage && !shouldOmitOpenAIChatStreamUsage(url),
     imageContentMode,
   })
   if (traceContext) {
@@ -834,7 +841,7 @@ async function handleOpenaiChat(
       }
       const resent = await handleOpenaiChat(
         body, baseUrl, apiKey, isStream, networkSettings, traceContext, requestOptions, upstreamHeaders, 'text_only',
-        unsupportedReasoningFields,
+        unsupportedReasoningFields, omitStreamUsage,
       )
       if (resent.ok) {
         rememberOpenAIChatTextOnlyModel(url, body.model)
@@ -869,7 +876,7 @@ async function handleOpenaiChat(
       }
       const resent = await handleOpenaiChat(
         body, baseUrl, apiKey, isStream, networkSettings, traceContext, requestOptions, upstreamHeaders,
-        imageContentMode, new Set([...unsupportedReasoningFields, rejectedField]),
+        imageContentMode, new Set([...unsupportedReasoningFields, rejectedField]), omitStreamUsage,
       )
       if (resent.ok) {
         rememberOpenAIChatUnsupportedReasoningField(url, body.model, rejectedField)
@@ -878,6 +885,39 @@ async function handleOpenaiChat(
           severity: 'info',
           summary: `Upstream rejected ${rejectedField} for ${body.model}; it is omitted for this model for 30 minutes`,
           details: { model: body.model, field: rejectedField, upstreamUrl: url, httpStatus: upstream.status, upstreamError: errText.slice(0, 500) },
+        })
+      }
+      return resent
+    }
+    if (!omitStreamUsage && isOpenAIChatStreamOptionsRejection(upstream.status, errText, transformed)) {
+      // Usage reporting is an enhancement, not a requirement: retry the same
+      // stream without `stream_options` rather than failing the whole turn.
+      if (traceContext) {
+        recordProxyTraceInBackground({
+          context: traceContext,
+          callId: traceCallId,
+          model: body.model,
+          upstreamUrl: url,
+          upstreamRequest: transformed,
+          requestHeaders: upstreamRequestHeaders,
+          startedAt,
+          startedAtMs,
+          responseStatus: upstream.status,
+          upstreamResponseBody: errText,
+          responseHeaders: upstream.headers,
+        })
+      }
+      const resent = await handleOpenaiChat(
+        body, baseUrl, apiKey, isStream, networkSettings, traceContext, requestOptions, upstreamHeaders,
+        imageContentMode, unsupportedReasoningFields, true,
+      )
+      if (resent.ok) {
+        rememberOpenAIChatStreamUsageUnsupported(url)
+        void diagnosticsService.recordEvent({
+          type: 'openai_chat_stream_usage_disabled',
+          severity: 'info',
+          summary: `Upstream rejected stream_options for ${body.model}; usage tails are omitted for this endpoint for 30 minutes`,
+          details: { model: body.model, upstreamUrl: url, httpStatus: upstream.status, upstreamError: errText.slice(0, 500) },
         })
       }
       return resent

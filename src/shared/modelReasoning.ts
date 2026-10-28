@@ -39,6 +39,13 @@ export type ModelReasoningProfile = {
   family:
     | 'explicit'
     | 'generic'
+    | 'gpt-6'
+    | 'gpt-5.6'
+    | 'gpt-5.5'
+    | 'gpt-5.4'
+    | 'gpt-5.3-codex'
+    | 'o-series'
+    | 'gpt-legacy'
     | 'deepseek-v4'
     | 'kimi-k3'
     | 'kimi-coding'
@@ -98,10 +105,96 @@ const GLM_53_STANDARD_API_PROFILE = {
   'supportedReasoningEfforts' | 'defaultReasoningEffort' | 'claudeCodeCapabilities'
 >
 
+// Mirrors the ChatGPT Codex catalog the official provider ships
+// (`services/openaiAuth/models.ts` and the desktop fallback), so a GPT model
+// configured through a third-party gateway offers exactly the same effort
+// levels as the same model through the official account.
+const GPT_56_REASONING_PROFILE = {
+  supportedReasoningEfforts: MODEL_REASONING_EFFORTS,
+  claudeCodeCapabilities: 'thinking,effort,adaptive_thinking,xhigh_effort,max_effort',
+} as const satisfies Pick<
+  ModelReasoningProfile,
+  'supportedReasoningEfforts' | 'claudeCodeCapabilities'
+>
+
+const GPT_55_REASONING_PROFILE = {
+  supportedReasoningEfforts: ['low', 'medium', 'high', 'xhigh'],
+  defaultReasoningEffort: 'medium',
+  claudeCodeCapabilities: 'thinking,effort,adaptive_thinking,xhigh_effort',
+} as const satisfies Pick<
+  ModelReasoningProfile,
+  'supportedReasoningEfforts' | 'defaultReasoningEffort' | 'claudeCodeCapabilities'
+>
+
+// o-series exposes the classic three reasoning levels; GPT-4/GPT-3.5 predate
+// the reasoning-effort parameter, so they must not advertise effort controls
+// even though they share the `gpt-` prefix.
+const O_SERIES_REASONING_PROFILE = {
+  supportedReasoningEfforts: ['low', 'medium', 'high'],
+  defaultReasoningEffort: 'medium',
+  claudeCodeCapabilities: 'thinking,effort',
+} as const satisfies Pick<
+  ModelReasoningProfile,
+  'supportedReasoningEfforts' | 'defaultReasoningEffort' | 'claudeCodeCapabilities'
+>
+
 // Known families inherit Claude Code effort levels unless a documented provider
 // contract narrows them. Provider-specific profiles keep standard API contracts
 // from accidentally disabling aliases accepted by coding-plan runtimes.
 const MODEL_REASONING_CAPABILITY_REGISTRY: readonly ModelReasoningCapabilityEntry[] = [
+  {
+    family: 'gpt-6',
+    apiFormats: COMPATIBLE_REASONING_API_FORMATS,
+    ...GPT_56_REASONING_PROFILE,
+    matches: modelId => (
+      modelId === 'gpt-6' ||
+      modelId.startsWith('gpt-6-') ||
+      modelId.startsWith('gpt-6.')
+    ),
+  },
+  {
+    family: 'gpt-5.6',
+    apiFormats: COMPATIBLE_REASONING_API_FORMATS,
+    ...GPT_56_REASONING_PROFILE,
+    matches: modelId => modelId === 'gpt-5.6' || modelId.startsWith('gpt-5.6-'),
+  },
+  {
+    family: 'gpt-5.5',
+    apiFormats: COMPATIBLE_REASONING_API_FORMATS,
+    ...GPT_55_REASONING_PROFILE,
+    matches: modelId => modelId === 'gpt-5.5' || modelId.startsWith('gpt-5.5-'),
+  },
+  {
+    family: 'gpt-5.4',
+    apiFormats: COMPATIBLE_REASONING_API_FORMATS,
+    ...GPT_55_REASONING_PROFILE,
+    matches: modelId => modelId === 'gpt-5.4' || modelId.startsWith('gpt-5.4-'),
+  },
+  {
+    family: 'gpt-5.3-codex',
+    apiFormats: COMPATIBLE_REASONING_API_FORMATS,
+    ...GPT_55_REASONING_PROFILE,
+    matches: modelId => (
+      modelId === 'gpt-5.3-codex' ||
+      modelId.startsWith('gpt-5.3-codex-')
+    ),
+  },
+  {
+    family: 'o-series',
+    apiFormats: COMPATIBLE_REASONING_API_FORMATS,
+    ...O_SERIES_REASONING_PROFILE,
+    matches: modelId => /^o\d(?:[-.]|$)/.test(modelId),
+  },
+  {
+    family: 'gpt-legacy',
+    apiFormats: COMPATIBLE_REASONING_API_FORMATS,
+    supportedReasoningEfforts: [],
+    claudeCodeCapabilities: 'none',
+    matches: modelId => (
+      modelId.startsWith('gpt-4') ||
+      modelId.startsWith('gpt-3.5')
+    ),
+  },
   {
     family: 'deepseek-v4',
     apiFormats: ['anthropic', 'openai_chat'],

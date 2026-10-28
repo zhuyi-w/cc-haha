@@ -54,6 +54,45 @@ describe('model reasoning capability pass-through', () => {
     )
   })
 
+  test('mirrors the ChatGPT effort catalog for GPT models behind any provider protocol', () => {
+    const cases = [
+      ['gpt-6-astra', ['low', 'medium', 'high', 'xhigh', 'max']],
+      ['gpt-6.1-sol', ['low', 'medium', 'high', 'xhigh', 'max']],
+      ['gpt-5.6-sol', ['low', 'medium', 'high', 'xhigh', 'max']],
+      ['openai/gpt-5.6-luna[1m]', ['low', 'medium', 'high', 'xhigh', 'max']],
+      ['gpt-5.5', ['low', 'medium', 'high', 'xhigh']],
+      ['gpt-5.4-mini', ['low', 'medium', 'high', 'xhigh']],
+      ['gpt-5.3-codex-spark', ['low', 'medium', 'high', 'xhigh']],
+    ] as const
+
+    for (const [modelId, efforts] of cases) {
+      for (const apiFormat of ['anthropic', 'openai_chat', 'openai_responses'] as const) {
+        expect(resolveModelReasoningProfile(modelId, apiFormat)?.supportedReasoningEfforts, `${modelId} ${apiFormat}`)
+          .toEqual([...efforts])
+      }
+    }
+
+    expect(normalizeModelReasoningEffort('gpt-5.5', 'max', 'openai_chat')).toBeUndefined()
+    expect(normalizeModelReasoningEffort('gpt-5.4-mini', 'xhigh', 'openai_responses')).toBe('xhigh')
+    expect(getClaudeCodeModelCapabilities('gpt-5.5', 'openai_chat')).toBe(
+      'thinking,effort,adaptive_thinking,xhigh_effort',
+    )
+  })
+
+  test('narrows o-series effort and hides reasoning controls on pre-reasoning GPT models', () => {
+    expect(resolveModelReasoningProfile('o3-mini', 'openai_responses')).toMatchObject({
+      family: 'o-series',
+      supportedReasoningEfforts: ['low', 'medium', 'high'],
+    })
+    expect(getClaudeCodeModelCapabilities('o1', 'openai_responses')).toBe('thinking,effort')
+
+    for (const modelId of ['gpt-4o', 'gpt-4.1-mini', 'gpt-3.5-turbo']) {
+      expect(resolveModelReasoningProfile(modelId, 'openai_chat')?.supportedReasoningEfforts).toEqual([])
+      expect(normalizeModelReasoningEffort(modelId, 'medium', 'openai_chat')).toBeUndefined()
+      expect(getClaudeCodeModelCapabilities(modelId, 'openai_chat')).toBe('none')
+    }
+  })
+
   test('requires enabled thinking for exact GLM 5.3 model ids', () => {
     for (const modelId of ['glm-5.3', 'glm-5.3-flash', 'zai/glm-5.3-flash[1m]']) {
       expect(resolveModelReasoningProfile(modelId, 'anthropic')).toMatchObject({

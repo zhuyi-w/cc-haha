@@ -320,12 +320,22 @@ function closeAllOpenBlocks(state: StreamState): void {
 
 type DeltaEx = Record<string, unknown> & {
   content?: string | null
+  refusal?: string | null
   tool_calls?: Array<{
     index: number
     id?: string
     type?: string
     function?: { name?: string; arguments?: string }
   }>
+}
+
+/**
+ * OpenAI can complete a turn with a `refusal` instead of `content`. Both are
+ * assistant-visible text, so both become Anthropic text deltas.
+ */
+function extractText(delta: DeltaEx): string {
+  if (typeof delta.refusal === 'string' && delta.refusal) return delta.refusal
+  return typeof delta.content === 'string' ? delta.content : ''
 }
 
 /**
@@ -384,7 +394,7 @@ function processChunk(chunk: OpenAIChatStreamChunk, state: StreamState): void {
   const delta = (choice.delta || {}) as DeltaEx
   if (state.finishReason) {
     if (chunk.usage) mergeUsageIntoHeldDelta(state, chunk.usage)
-    if (extractReasoning(delta) || delta.content || delta.tool_calls?.length) {
+    if (extractReasoning(delta) || extractText(delta) || delta.tool_calls?.length) {
       throw new Error('OpenAI Chat upstream sent content after finish_reason')
     }
     return
@@ -395,9 +405,10 @@ function processChunk(chunk: OpenAIChatStreamChunk, state: StreamState): void {
     if (state.currentBlockType !== 'thinking') closeCurrentNonToolBlock(state)
     handleThinking(delta, state)
   }
-  if (delta.content != null && delta.content !== '') {
+  const text = extractText(delta)
+  if (text) {
     if (state.currentBlockType !== 'text') closeCurrentNonToolBlock(state)
-    handleText(delta, state)
+    handleText(text, state)
   }
   if (delta.tool_calls?.length) {
     closeCurrentNonToolBlock(state)
@@ -432,15 +443,15 @@ function handleThinking(delta: DeltaEx, state: StreamState): void {
   }
 }
 
-function handleText(delta: DeltaEx, state: StreamState): void {
-  if (delta.content == null || delta.content === '') return
+function handleText(text: string, state: StreamState): void {
+  if (!text) return
 
   if (state.currentBlockType !== 'text' || !state.blockStartSent || state.blockStopSent) {
     openBlock(state, 'text', { type: 'text', text: '' })
   }
 
   emitDelta(state, state.currentBlockIndex, {
-    type: 'text_delta', text: delta.content,
+    type: 'text_delta', text,
   })
 }
 
@@ -514,7 +525,11 @@ function handleFinishReason(
   state: StreamState,
 ): void {
   if (state.finishReason) return
-  const stopReason = mapFinishReason(finishReason)
+  // Gateways occasionally label a tool-call turn `stop`. The tool blocks are
+  // already open, so advertise `tool_use` or Anthropic clients will not run them.
+  const stopReason = finishReason === 'stop' && state.toolBlocks.size > 0
+    ? 'tool_use'
+    : mapFinishReason(finishReason)
   if (finishReason === 'content_filter' && state.toolBlocks.size > 0) {
     throw new Error('OpenAI Chat upstream filtered a tool-call turn before it could be committed')
   }

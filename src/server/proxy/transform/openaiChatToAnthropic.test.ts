@@ -36,6 +36,28 @@ describe('Chat non-streaming response integrity', () => {
     expect(result.stop_reason).toBe('max_tokens')
     expect(result.content.some(block => block.type === 'tool_use')).toBe(false)
   })
+  test('refusal text is preserved instead of returning an empty turn', () => {
+    const upstream = {
+      id: 'fixture', model: 'fixture',
+      choices: [{
+        message: { role: 'assistant', content: null, refusal: 'I cannot help with that.' },
+        finish_reason: 'stop',
+      }],
+    } as OpenAIChatResponse
+
+    const result = openaiChatToAnthropic(upstream, 'fixture')
+    expect(result.content).toEqual([{ type: 'text', text: 'I cannot help with that.' }])
+    expect(result.stop_reason).toBe('end_turn')
+  })
+  test('a tool-call turn labelled stop still advertises tool_use', () => {
+    const result = openaiChatToAnthropic(
+      response({ id: 'call', function: { name: 'Read', arguments: '{}' } }, 'stop'),
+      'fixture',
+    )
+    expect(result.stop_reason).toBe('tool_use')
+    expect(result.content).toHaveLength(1)
+    expect(result.content[0]).toMatchObject({ type: 'tool_use', id: 'call', name: 'Read' })
+  })
 })
 
 // Issue #1327: zero-valued compatibility cache fields must not hide OpenAI usage.

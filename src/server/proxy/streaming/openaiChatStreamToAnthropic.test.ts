@@ -124,6 +124,21 @@ describe('Chat stream protocol boundaries', () => {
     }
   })
 
+  test('streamed refusal text becomes the assistant text', async () => {
+    const events = await collect(chunk({ refusal: 'No ' }) + chunk({ refusal: 'thanks' }) + chunk({}, 'stop'))
+
+    expect(events.filter(e => e.type === 'content_block_start').map(e => e.content_block.type)).toEqual(['text'])
+    expect(events.filter(e => e.delta?.text).map(e => e.delta.text)).toEqual(['No ', 'thanks'])
+    expect(events.find(e => e.type === 'message_delta').delta.stop_reason).toBe('end_turn')
+  })
+
+  test('a tool-call stream labelled stop still advertises tool_use', async () => {
+    const events = await collect(chunk({ tool_calls: [tool()] }) + chunk({}, 'stop'))
+
+    expect(events.find(e => e.type === 'message_delta').delta.stop_reason).toBe('tool_use')
+    expect(events.some(e => e.type === 'error')).toBe(false)
+  })
+
   test('empty reasoning placeholders do not fragment text blocks', async () => {
     const events = await collect(chunk({ reasoning_content: '', content: 'one' }) + chunk({ reasoning_content: '', content: 'two' }) + chunk({}, 'stop'))
     expect(events.filter(e => e.type === 'content_block_start').map(e => e.content_block.type)).toEqual(['text'])

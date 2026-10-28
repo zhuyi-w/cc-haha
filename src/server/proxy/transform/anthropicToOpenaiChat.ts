@@ -31,6 +31,8 @@ export type OpenAIChatTransformOptions = RequestCompatibilityOptions & {
   // Defaults to sending. Turned off for a model whose upstream refused the field.
   passReasoningEffort?: boolean
   passSamplingParams?: boolean
+  // Defaults to sending. Turned off for endpoints that reject `stream_options`.
+  passStreamUsage?: boolean
   imageContentMode?: OpenAIChatImageContentMode
 }
 
@@ -78,7 +80,7 @@ export function anthropicToOpenaiChat(
   }
 
   // Many OpenAI-compatible servers omit usage on streams unless asked.
-  if (result.stream) {
+  if (result.stream && options.passStreamUsage !== false) {
     result.stream_options = { include_usage: true }
   }
 
